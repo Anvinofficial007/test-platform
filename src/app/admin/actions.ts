@@ -132,19 +132,55 @@ async function uploadImageIfPresent(
 
 // ── Questions ────────────────────────────────────────────────────────────
 
-export async function addQuestion(testId: string, formData: FormData) {
+export async function requestSignedUploadUrl(testId: string, fileName: string, contentType?: string) {
+  const { admin } = await requireAdmin();
+  const ext = fileName.includes(".") ? fileName.split(".").pop() || "png" : "png";
+  const path = `${testId}/${crypto.randomUUID()}.${ext}`;
+
+  const { data, error } = await admin.storage.from("question-images").createSignedUploadUrl(path, {
+    upsert: false,
+  });
+
+  if (error || !data) throw new Error(error?.message ?? "Failed to prepare image upload");
+
+  return {
+    path: data.path,
+    signedUrl: data.signedUrl,
+    token: data.token,
+    contentType: contentType || "application/octet-stream",
+  };
+}
+
+export async function addQuestionWithUrls(
+  testId: string,
+  values: {
+    question_text: string;
+    question_image_url?: string | null;
+    option_a_text: string;
+    option_a_image_url?: string | null;
+    option_b_text: string;
+    option_b_image_url?: string | null;
+    option_c_text: string;
+    option_c_image_url?: string | null;
+    option_d_text: string;
+    option_d_image_url?: string | null;
+    correct_answer: "A" | "B" | "C" | "D";
+    marks: number;
+    negative_marks: number;
+  }
+) {
   const { admin } = await requireAdmin();
 
-  const question_text = String(formData.get("question_text") ?? "").trim();
-  const option_a_text = String(formData.get("option_a_text") ?? "").trim();
-  const option_b_text = String(formData.get("option_b_text") ?? "").trim();
-  const option_c_text = String(formData.get("option_c_text") ?? "").trim();
-  const option_d_text = String(formData.get("option_d_text") ?? "").trim();
-  const correct_answer = String(formData.get("correct_answer") ?? "") as "A" | "B" | "C" | "D";
-  const marks = Number(formData.get("marks") ?? 1);
-  const negative_marks = Number(formData.get("negative_marks") ?? 0);
+  const question_text = values.question_text.trim();
+  const option_a_text = values.option_a_text.trim();
+  const option_b_text = values.option_b_text.trim();
+  const option_c_text = values.option_c_text.trim();
+  const option_d_text = values.option_d_text.trim();
+  const correct_answer = values.correct_answer;
+  const marks = Number(values.marks ?? 1);
+  const negative_marks = Number(values.negative_marks ?? 0);
 
-  if (!question_text && !formData.get("question_image")) {
+  if (!question_text && !values.question_image_url) {
     throw new Error("Question needs text, an image, or both");
   }
   if (!option_a_text || !option_b_text || !option_c_text || !option_d_text) {
@@ -154,8 +190,45 @@ export async function addQuestion(testId: string, formData: FormData) {
     throw new Error("Select a valid correct answer");
   }
 
-  // Uploaded once questions text/shape is validated, so a bad form submit
-  // doesn't leave orphaned files in Storage.
+  const { count } = await admin
+    .from("questions")
+    .select("id", { count: "exact", head: true })
+    .eq("test_id", testId);
+
+  const { error } = await admin.from("questions").insert({
+    test_id: testId,
+    question_text,
+    question_image_url: values.question_image_url ?? null,
+    option_a_text,
+    option_a_image_url: values.option_a_image_url ?? null,
+    option_b_text,
+    option_b_image_url: values.option_b_image_url ?? null,
+    option_c_text,
+    option_c_image_url: values.option_c_image_url ?? null,
+    option_d_text,
+    option_d_image_url: values.option_d_image_url ?? null,
+    correct_answer,
+    marks,
+    negative_marks,
+    order_index: (count ?? 0) + 1,
+  });
+
+  if (error) throw new Error(error.message);
+  await recalcTotalMarks(admin, testId);
+  revalidatePath(`/admin/tests/${testId}`);
+}
+
+export async function addQuestion(testId: string, formData: FormData) {
+  const question_text = String(formData.get("question_text") ?? "").trim();
+  const option_a_text = String(formData.get("option_a_text") ?? "").trim();
+  const option_b_text = String(formData.get("option_b_text") ?? "").trim();
+  const option_c_text = String(formData.get("option_c_text") ?? "").trim();
+  const option_d_text = String(formData.get("option_d_text") ?? "").trim();
+  const correct_answer = String(formData.get("correct_answer") ?? "") as "A" | "B" | "C" | "D";
+  const marks = Number(formData.get("marks") ?? 1);
+  const negative_marks = Number(formData.get("negative_marks") ?? 0);
+
+  const { admin } = await requireAdmin();
   const [question_image_url, option_a_image_url, option_b_image_url, option_c_image_url, option_d_image_url] =
     await Promise.all([
       uploadImageIfPresent(admin, formData, "question_image", testId),
@@ -165,13 +238,7 @@ export async function addQuestion(testId: string, formData: FormData) {
       uploadImageIfPresent(admin, formData, "option_d_image", testId),
     ]);
 
-  const { count } = await admin
-    .from("questions")
-    .select("id", { count: "exact", head: true })
-    .eq("test_id", testId);
-
-  const { error } = await admin.from("questions").insert({
-    test_id: testId,
+  await addQuestionWithUrls(testId, {
     question_text,
     question_image_url,
     option_a_text,
@@ -185,12 +252,7 @@ export async function addQuestion(testId: string, formData: FormData) {
     correct_answer,
     marks,
     negative_marks,
-    order_index: (count ?? 0) + 1,
   });
-
-  if (error) throw new Error(error.message);
-  await recalcTotalMarks(admin, testId);
-  revalidatePath(`/admin/tests/${testId}`);
 }
 
 export async function deleteQuestion(testId: string, questionId: string) {

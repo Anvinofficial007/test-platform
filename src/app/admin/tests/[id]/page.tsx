@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { finalizeIfExpired } from "@/lib/scoring";
 import { getTestAnalytics } from "@/lib/analytics";
+import AdminQuestionForm from "@/components/AdminQuestionForm";
 import {
-  addQuestion,
   deleteQuestion,
   disqualifyAttempt,
   importQuestionsCsv,
@@ -66,7 +66,6 @@ export default async function AdminTestDetailPage({
 
   const boundUpdateStatus = updateTestStatus.bind(null, id);
   const boundUpdateSettings = updateTestSettings.bind(null, id);
-  const boundAddQuestion = addQuestion.bind(null, id);
   const boundDeleteQuestion = deleteQuestion.bind(null, id);
   const boundImportCsv = importQuestionsCsv.bind(null, id);
   const boundResetAttempt = resetAttempt.bind(null, id);
@@ -224,63 +223,7 @@ export default async function AdminTestDetailPage({
             <h3 className="text-xs font-semibold mb-2 tracking-wide" style={{ color: "var(--ink-soft)" }}>
               Add one question
             </h3>
-            <form action={boundAddQuestion} className="space-y-3">
-              <input
-                name="question_text"
-                placeholder="Question text (optional if using an image)"
-                className="field-input"
-              />
-              <div>
-                <label className="field-label">Question image (optional)</label>
-                <input name="question_image" type="file" accept="image/*" className="field-file" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="field-label">Option A</label>
-                  <input name="option_a_text" placeholder="Text" required className="field-input mb-1.5" />
-                  <input name="option_a_image" type="file" accept="image/*" className="field-file" />
-                </div>
-                <div>
-                  <label className="field-label">Option B</label>
-                  <input name="option_b_text" placeholder="Text" required className="field-input mb-1.5" />
-                  <input name="option_b_image" type="file" accept="image/*" className="field-file" />
-                </div>
-                <div>
-                  <label className="field-label">Option C</label>
-                  <input name="option_c_text" placeholder="Text" required className="field-input mb-1.5" />
-                  <input name="option_c_image" type="file" accept="image/*" className="field-file" />
-                </div>
-                <div>
-                  <label className="field-label">Option D</label>
-                  <input name="option_d_text" placeholder="Text" required className="field-input mb-1.5" />
-                  <input name="option_d_image" type="file" accept="image/*" className="field-file" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="field-label">Correct</label>
-                  <select name="correct_answer" required className="field-input">
-                    <option value="">—</option>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
-                    <option value="D">D</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label">Marks</label>
-                  <input name="marks" type="number" step="0.25" defaultValue={1} className="field-input" />
-                </div>
-                <div>
-                  <label className="field-label">Negative</label>
-                  <input name="negative_marks" type="number" step="0.25" defaultValue={0.25} className="field-input" />
-                </div>
-              </div>
-
-              <button className="btn btn-primary w-full">Add question</button>
-            </form>
+            <AdminQuestionForm testId={id} defaultNegativeMarks={0.25} />
           </div>
 
           <div>
