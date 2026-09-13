@@ -159,13 +159,19 @@ export default async function AdminTestDetailPage({
           <div className="divide-y divide-slate-100 mb-6">
             {(questions ?? []).map((q, i) => (
               <div key={q.id} className="py-2.5 flex items-start justify-between gap-4">
-                <div className="text-sm">
-                  <p className="text-slate-900">
-                    {i + 1}. {q.question_text}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Answer: {q.correct_answer} · +{q.marks} / −{q.negative_marks}
-                  </p>
+                <div className="text-sm flex gap-3">
+                  {q.question_image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={q.question_image_url} alt="" className="w-14 h-14 object-cover rounded border border-slate-200 shrink-0" />
+                  )}
+                  <div>
+                    <p className="text-slate-900">
+                      {i + 1}. {q.question_text}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Answer: {q.correct_answer} · +{q.marks} / −{q.negative_marks}
+                    </p>
+                  </div>
                 </div>
                 <form action={async () => { "use server"; await boundDeleteQuestion(q.id); }}>
                   <button className="text-xs text-red-500 hover:text-red-700 shrink-0">Delete</button>
@@ -183,15 +189,30 @@ export default async function AdminTestDetailPage({
             <form action={boundAddQuestion} className="space-y-2">
               <input
                 name="question_text"
-                placeholder="Question text"
-                required
+                placeholder="Question text (optional if using an image)"
                 className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
               />
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Question image (optional)</label>
+                <input name="question_image" type="file" accept="image/*" className="w-full text-xs" />
+              </div>
               <div className="grid grid-cols-2 gap-2">
-                <input name="option_a_text" placeholder="Option A" required className="rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
-                <input name="option_b_text" placeholder="Option B" required className="rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
-                <input name="option_c_text" placeholder="Option C" required className="rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
-                <input name="option_d_text" placeholder="Option D" required className="rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
+                <div>
+                  <input name="option_a_text" placeholder="Option A" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
+                  <input name="option_a_image" type="file" accept="image/*" className="w-full text-xs" />
+                </div>
+                <div>
+                  <input name="option_b_text" placeholder="Option B" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
+                  <input name="option_b_image" type="file" accept="image/*" className="w-full text-xs" />
+                </div>
+                <div>
+                  <input name="option_c_text" placeholder="Option C" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
+                  <input name="option_c_image" type="file" accept="image/*" className="w-full text-xs" />
+                </div>
+                <div>
+                  <input name="option_d_text" placeholder="Option D" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
+                  <input name="option_d_image" type="file" accept="image/*" className="w-full text-xs" />
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <select name="correct_answer" required className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">

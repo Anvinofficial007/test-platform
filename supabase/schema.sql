@@ -98,21 +98,26 @@ alter table public.questions enable row level security;
 alter table public.attempts enable row level security;
 alter table public.answers enable row level security;
 
+drop policy if exists "Users can read own row" on public.users;
 create policy "Users can read own row" on public.users
   for select using (auth.uid() = id);
 
+drop policy if exists "Users can create their own profile row" on public.users;
 create policy "Users can create their own profile row" on public.users
   for insert with check (auth.uid() = id);
 
+drop policy if exists "Published tests are readable by authenticated users" on public.tests;
 create policy "Published tests are readable by authenticated users" on public.tests
   for select using (status = 'published' and auth.role() = 'authenticated');
 
 -- No direct client policy on questions: only the server (service role)
 -- reads this table, so it always strips correct_answer before responding.
 
+drop policy if exists "Students manage their own attempts" on public.attempts;
 create policy "Students manage their own attempts" on public.attempts
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Students manage answers on their own attempts" on public.answers;
 create policy "Students manage answers on their own attempts" on public.answers
   for all using (
     exists (
@@ -140,17 +145,43 @@ as $$
   );
 $$;
 
+drop policy if exists "Admins can read all users" on public.users;
 create policy "Admins can read all users" on public.users
   for select using (public.is_admin());
 
+drop policy if exists "Admins can read all attempts" on public.attempts;
 create policy "Admins can read all attempts" on public.attempts
   for select using (public.is_admin());
 
+drop policy if exists "Admins can read all answers" on public.answers;
 create policy "Admins can read all answers" on public.answers
   for select using (public.is_admin());
 
 -- To make your own account an admin after signing up, run in the SQL editor:
 --   update public.users set role = 'admin' where register_number = 'YOUR_REG_NO';
+
+-- ─────────────────────────────────────────────────────────────
+-- Storage bucket for question/option images (Phase 3 image upload).
+-- Public bucket: anyone with the URL can view an image (fine for exam
+-- figures/diagrams), but only the server's service-role client — used
+-- exclusively inside admin server actions, after requireAdmin() checks
+-- the caller's role — can upload or delete objects in it.
+-- ─────────────────────────────────────────────────────────────
+insert into storage.buckets (id, name, public)
+values ('question-images', 'question-images', true)
+on conflict (id) do nothing;
+
+drop policy if exists "Question images are publicly readable" on storage.objects;
+create policy "Question images are publicly readable"
+  on storage.objects for select
+  using (bucket_id = 'question-images');
+
+-- Uploads only ever happen server-side through the service-role client
+-- (see addQuestion in src/app/admin/actions.ts), which bypasses these
+-- policies entirely — so no insert/update/delete policy is needed here
+-- for the browser. This keeps "only admins can add images" enforced by
+-- the same requireAdmin() check as everything else in the admin panel,
+-- rather than duplicating that logic in a storage policy.
 
 -- ─────────────────────────────────────────────────────────────
 -- Seed data — same demo test/questions as the Phase 1 hardcoded version,

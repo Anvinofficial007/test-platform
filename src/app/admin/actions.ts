@@ -88,6 +88,30 @@ async function recalcTotalMarks(admin: Awaited<ReturnType<typeof requireAdmin>>[
   await admin.from("tests").update({ total_marks: total }).eq("id", testId);
 }
 
+// Uploads an optional image file (by form field name) to the question-images
+// bucket and returns its public URL, or null if no file was chosen.
+async function uploadImageIfPresent(
+  admin: Awaited<ReturnType<typeof requireAdmin>>["admin"],
+  formData: FormData,
+  field: string,
+  testId: string
+): Promise<string | null> {
+  const file = formData.get(field) as File | null;
+  if (!file || file.size === 0) return null;
+
+  const ext = file.name.split(".").pop() || "png";
+  const path = `${testId}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await admin.storage.from("question-images").upload(path, file, {
+    contentType: file.type || undefined,
+    upsert: false,
+  });
+  if (error) throw new Error(`Image upload failed (${field}): ${error.message}`);
+
+  const { data } = admin.storage.from("question-images").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 // ── Questions ────────────────────────────────────────────────────────────
 
 export async function addQuestion(testId: string, formData: FormData) {
@@ -102,12 +126,26 @@ export async function addQuestion(testId: string, formData: FormData) {
   const marks = Number(formData.get("marks") ?? 1);
   const negative_marks = Number(formData.get("negative_marks") ?? 0);
 
-  if (!question_text || !option_a_text || !option_b_text || !option_c_text || !option_d_text) {
-    throw new Error("Question text and all four options are required");
+  if (!question_text && !formData.get("question_image")) {
+    throw new Error("Question needs text, an image, or both");
+  }
+  if (!option_a_text || !option_b_text || !option_c_text || !option_d_text) {
+    throw new Error("All four options need text (an image can supplement, not replace, an option)");
   }
   if (!["A", "B", "C", "D"].includes(correct_answer)) {
     throw new Error("Select a valid correct answer");
   }
+
+  // Uploaded once questions text/shape is validated, so a bad form submit
+  // doesn't leave orphaned files in Storage.
+  const [question_image_url, option_a_image_url, option_b_image_url, option_c_image_url, option_d_image_url] =
+    await Promise.all([
+      uploadImageIfPresent(admin, formData, "question_image", testId),
+      uploadImageIfPresent(admin, formData, "option_a_image", testId),
+      uploadImageIfPresent(admin, formData, "option_b_image", testId),
+      uploadImageIfPresent(admin, formData, "option_c_image", testId),
+      uploadImageIfPresent(admin, formData, "option_d_image", testId),
+    ]);
 
   const { count } = await admin
     .from("questions")
@@ -117,10 +155,15 @@ export async function addQuestion(testId: string, formData: FormData) {
   const { error } = await admin.from("questions").insert({
     test_id: testId,
     question_text,
+    question_image_url,
     option_a_text,
+    option_a_image_url,
     option_b_text,
+    option_b_image_url,
     option_c_text,
+    option_c_image_url,
     option_d_text,
+    option_d_image_url,
     correct_answer,
     marks,
     negative_marks,

@@ -212,6 +212,10 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
                   />
                   <span className="font-medium text-slate-500">{opt.key}.</span>
                   <span>{opt.text}</span>
+                  {opt.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={opt.image_url} alt={`Option ${opt.key}`} className="h-12 rounded border ml-2" />
+                  )}
                 </label>
               ))}
             </div>

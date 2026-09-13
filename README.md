@@ -55,6 +55,23 @@
   admin power only ever activates for accounts you've explicitly marked
   as admin.
 
+### Image uploads (question & option figures)
+
+The "Add one question" form on `/admin/tests/[id]` now has an optional
+file picker next to the question text and each of the four options —
+for circuit diagrams, waveforms, graphs, or anything from the plan's
+"questions with images" section. A question can have text, an image, or
+both; each option still needs text (an image can supplement it, not
+replace it, since students need something to click).
+
+Uploaded files go to a public Supabase Storage bucket called
+`question-images` (created by `supabase/schema.sql`) — only the admin
+server actions can upload to it, but anyone with the resulting URL can
+view the image, which is what lets it render in the student's browser.
+The CSV bulk-import path doesn't support images (there's no column for
+a file in a spreadsheet) — use the single-question form for anything
+with a figure.
+
 ### Making yourself an admin
 
 There's no signup flow for admins on purpose. After creating your normal
