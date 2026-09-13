@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatInAppTz } from "@/lib/time";
 
 const statusStyles: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600",
@@ -36,7 +37,9 @@ export default async function AdminTestsPage() {
             <div>
               <p className="font-medium text-slate-900 text-sm">{t.title}</p>
               <p className="text-xs text-slate-500 mt-0.5">
-                {new Date(t.start_time).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                {formatInAppTz(t.start_time, { dateStyle: "medium", timeStyle: "short" })} IST
+                {" → "}
+                {formatInAppTz(t.end_time, { timeStyle: "short" })} IST
                 {" · "}
                 {t.duration_minutes} min · {t.total_marks} marks
               </p>

@@ -6,6 +6,7 @@ import type { Question, Test } from "@/lib/data";
 
 type AnswerState = Record<string, string | null>;
 type ReviewState = Record<string, boolean>;
+type SyncStatus = "synced" | "syncing" | "offline";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
 
@@ -23,7 +24,9 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   const [answers, setAnswers] = useState<AnswerState>({});
   const [marked, setMarked] = useState<ReviewState>({});
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("synced");
   const dirtyRef = useRef(false);
+  const submittingRef = useRef(false);
 
   const storageKey = `attempt:${id}`;
 
@@ -33,6 +36,13 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
+          // The attempt may have already been auto-finalized (time ran out
+          // while this tab, or any tab, was closed) — send them straight
+          // to the result instead of showing a dead end.
+          if (data.finalized) {
+            router.push(`/result/${id}`);
+            return;
+          }
           setErrorMsg(data.error);
           setPhase("error");
           return;
@@ -43,14 +53,29 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
         // so a page refresh or a slow client clock can't extend the test.
         setSecondsLeft(data.secondsLeft);
 
-        // Resume from local backup if present (network-drop resilience, Phase 1 version)
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setAnswers(parsed.answers ?? {});
-          setMarked(parsed.marked ?? {});
+        // Resume: start from what the DB last had synced (works across
+        // devices/browsers), then layer in anything still sitting in this
+        // browser's local backup that never made it to the server (e.g. the
+        // connection dropped right before the last autosave tick).
+        const merged: AnswerState = { ...(data.savedAnswers ?? {}) };
+        let restoredMarks: ReviewState = {};
+        const localBackup = localStorage.getItem(storageKey);
+        if (localBackup) {
+          try {
+            const parsed = JSON.parse(localBackup);
+            Object.assign(merged, parsed.answers ?? {});
+            restoredMarks = parsed.marked ?? {};
+          } catch {
+            // ignore corrupt local backup
+          }
         }
+        setAnswers(merged);
+        setMarked(restoredMarks);
         setPhase("instructions");
+      })
+      .catch(() => {
+        setErrorMsg("Couldn't reach the server. Check your connection and reload.");
+        setPhase("error");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -67,14 +92,31 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, secondsLeft]);
 
-  // Auto-save to localStorage periodically instead of on every click,
-  // so 300 students clicking "Next" doesn't hammer the network (per the plan).
+  // Auto-save periodically (not on every click, so 300 students clicking
+  // "Next" doesn't hammer the network, per the plan). Writes to
+  // localStorage immediately for offline resilience, and to the DB so
+  // progress survives a refresh, a crash, or switching devices.
   useEffect(() => {
     if (phase !== "running") return;
-    const interval = setInterval(() => {
-      if (dirtyRef.current) {
-        localStorage.setItem(storageKey, JSON.stringify({ answers, marked }));
-        dirtyRef.current = false;
+    const interval = setInterval(async () => {
+      if (!dirtyRef.current) return;
+      localStorage.setItem(storageKey, JSON.stringify({ answers, marked }));
+      dirtyRef.current = false;
+
+      setSyncStatus("syncing");
+      try {
+        const res = await fetch(`/api/tests/${id}/save-answers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers }),
+        });
+        if (!res.ok) throw new Error();
+        setSyncStatus("synced");
+      } catch {
+        // Offline or the request failed — the change is still safe in
+        // localStorage, and dirtyRef is left true so the next tick retries.
+        dirtyRef.current = true;
+        setSyncStatus("offline");
       }
     }, AUTOSAVE_INTERVAL_MS);
     return () => clearInterval(interval);
@@ -92,25 +134,55 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   }
 
   async function handleSubmit() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setPhase("submitting");
     localStorage.setItem(storageKey, JSON.stringify({ answers, marked }));
 
-    const res = await fetch(`/api/tests/${id}/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
-    });
-    const result = await res.json();
+    // The exam-day case this guards against: 300 students submitting near
+    // the same second and a few requests time out or drop. Retry a handful
+    // of times with a short backoff before giving up — the attempt and
+    // answers are idempotent to resend (submit re-scores from the payload,
+    // save-answers upserts), so a retry can't double-count anything.
+    const MAX_ATTEMPTS = 4;
+    let lastError = "";
 
-    if (result.error) {
-      setErrorMsg(result.error);
-      setPhase("error");
-      return;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await fetch(`/api/tests/${id}/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers }),
+        });
+        const result = await res.json();
+
+        if (result.error) {
+          // Already submitted (e.g. auto-finalized while this request was
+          // in flight) isn't a failure from the student's point of view —
+          // just go to the result.
+          sessionStorage.removeItem(`result:${id}`);
+          localStorage.removeItem(storageKey);
+          router.push(`/result/${id}`);
+          return;
+        }
+
+        sessionStorage.setItem(`result:${id}`, JSON.stringify(result));
+        localStorage.removeItem(storageKey);
+        router.push(`/result/${id}`);
+        return;
+      } catch {
+        lastError = "Couldn't reach the server to submit.";
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+      }
     }
 
-    sessionStorage.setItem(`result:${id}`, JSON.stringify(result));
-    localStorage.removeItem(storageKey);
-    router.push(`/result/${id}`);
+    // All retries failed — surface a retry button rather than losing the
+    // attempt. Answers are still safe in localStorage either way.
+    submittingRef.current = false;
+    setErrorMsg(`${lastError} Your answers are saved — try submitting again.`);
+    setPhase("error");
   }
 
   const answeredCount = useMemo(
@@ -123,12 +195,26 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   }
 
   if (phase === "error" || !test) {
+    // A submit failure (as opposed to a load failure) still has answers
+    // in-memory and in localStorage — offer to retry rather than stranding
+    // the student with only "back to dashboard".
+    const canRetrySubmit = phase === "error" && test && questions.length > 0;
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-3 text-slate-500">
+      <main className="min-h-screen flex flex-col items-center justify-center gap-3 text-slate-500 px-4 text-center">
         <p>{errorMsg || "Something went wrong."}</p>
-        <a href="/dashboard" className="text-slate-900 underline text-sm">
-          Back to dashboard
-        </a>
+        <div className="flex items-center gap-4">
+          {canRetrySubmit && (
+            <button
+              onClick={handleSubmit}
+              className="rounded-md bg-slate-900 text-white text-sm px-4 py-2 hover:bg-slate-800"
+            >
+              Retry submit
+            </button>
+          )}
+          <a href="/dashboard" className="text-slate-900 underline text-sm">
+            Back to dashboard
+          </a>
+        </div>
       </main>
     );
   }
@@ -177,13 +263,26 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
             <p className="text-sm text-slate-500">
               Question {current + 1} of {questions.length}
             </p>
-            <span
-              className={`text-sm font-mono font-medium px-3 py-1 rounded-md ${
-                timeLow ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              {mins}:{secs.toString().padStart(2, "0")}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-xs px-2 py-1 rounded-md ${
+                  syncStatus === "offline"
+                    ? "bg-amber-100 text-amber-700"
+                    : syncStatus === "syncing"
+                    ? "bg-slate-100 text-slate-500"
+                    : "text-slate-400"
+                }`}
+              >
+                {syncStatus === "offline" ? "Offline — saved locally" : syncStatus === "syncing" ? "Saving…" : "Saved"}
+              </span>
+              <span
+                className={`text-sm font-mono font-medium px-3 py-1 rounded-md ${
+                  timeLow ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                {mins}:{secs.toString().padStart(2, "0")}
+              </span>
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-lg p-5">

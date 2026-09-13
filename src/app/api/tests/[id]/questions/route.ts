@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { finalizeIfExpired } from "@/lib/scoring";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,8 +24,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "This test is not available right now" }, { status: 403 });
   }
 
+  const admin = createAdminClient();
+
   // Find or create this student's attempt. RLS ("Students manage their own
-  // attempts") lets this insert succeed only for the signed-in user's own row.
+  // attempts") lets this insert succeed only for the signed-in user's own
+  // row, but two rapid page loads (e.g. a double-click, or a flaky network
+  // causing a retry) can race and both try to insert — the DB's unique
+  // (test_id, user_id) constraint stops a duplicate row from landing, and
+  // we just re-fetch the winner here instead of erroring.
   let { data: attempt } = await supabase
     .from("attempts")
     .select("*")
@@ -32,26 +39,50 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (attempt?.status === "submitted") {
-    return NextResponse.json({ error: "You have already submitted this test" }, { status: 403 });
-  }
-
   if (!attempt) {
     const { data: created, error } = await supabase
       .from("attempts")
       .insert({ test_id: id, user_id: user.id, status: "in_progress" })
       .select()
       .single();
+
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error.code === "23505") {
+        // Someone else's concurrent request won the race — fetch their row.
+        const { data: existing } = await supabase
+          .from("attempts")
+          .select("*")
+          .eq("test_id", id)
+          .eq("user_id", user.id)
+          .single();
+        attempt = existing ?? null;
+      } else {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    } else {
+      attempt = created;
     }
-    attempt = created;
+  }
+
+  if (!attempt) {
+    return NextResponse.json({ error: "Could not start or resume an attempt" }, { status: 500 });
+  }
+
+  // If time ran out while nobody was looking (tab closed, device died, lost
+  // connection) this finalizes it now using whatever was last synced —
+  // rather than leaving it stuck "in_progress" forever.
+  attempt = await finalizeIfExpired(admin, id, attempt, test.duration_minutes);
+
+  if (attempt.status === "submitted") {
+    return NextResponse.json({ error: "This attempt has already been submitted", finalized: true }, { status: 403 });
+  }
+  if (attempt.status !== "in_progress") {
+    return NextResponse.json({ error: "This attempt is no longer active" }, { status: 403 });
   }
 
   // Questions are read with the admin client because RLS intentionally has
   // no client-facing select policy on this table — correct_answer must never
   // reach the browser, so we strip it here on the server before responding.
-  const admin = createAdminClient();
   const { data: questions } = await admin
     .from("questions")
     .select("*")
@@ -72,11 +103,30 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ],
   }));
 
+  // Resume support: hand back whatever answers were already synced to the
+  // DB (from a previous session, a different tab, or a refresh), so the
+  // client isn't relying on localStorage alone to restore progress.
+  const { data: savedAnswers } = await admin
+    .from("answers")
+    .select("question_id, selected_answer")
+    .eq("attempt_id", attempt.id);
+
+  const savedAnswersMap: Record<string, string | null> = {};
+  for (const a of savedAnswers ?? []) {
+    savedAnswersMap[a.question_id] = a.selected_answer;
+  }
+
   // Remaining time is derived from the server-recorded started_at, not the
   // client clock, so refreshing the page (or a slow connection) can't extend it.
   const elapsedSeconds = Math.floor((now - new Date(attempt.started_at).getTime()) / 1000);
   const totalSeconds = test.duration_minutes * 60;
   const secondsLeft = Math.max(0, totalSeconds - elapsedSeconds);
 
-  return NextResponse.json({ test, questions: safeQuestions, attempt, secondsLeft });
+  return NextResponse.json({
+    test,
+    questions: safeQuestions,
+    attempt,
+    secondsLeft,
+    savedAnswers: savedAnswersMap,
+  });
 }

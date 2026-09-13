@@ -84,10 +84,56 @@ update public.users set role = 'admin' where register_number = 'YOUR_REG_NO';
 Then sign out and back in — an "Admin panel" link appears on the
 dashboard.
 
-## Next: Phase 4 (reliability)
+## Phase 4 — reliability
 
-Not built yet: resuming a test after a hard refresh mid-attempt (Phase 2
-already resumes the *timer* correctly, but answers aren't reloaded from
-the DB — only from localStorage, which Phase 1 relied on), automatic
-submission exactly at expiry even if the tab is closed, and stronger
-duplicate-attempt prevention under concurrent load.
+- **Answers now sync to the DB, not just localStorage.** A new
+  `/api/tests/[id]/save-answers` endpoint runs on the same 5-second
+  autosave tick as before, upserting into the `answers` table. On load,
+  `/api/tests/[id]/questions` returns whatever's already saved for that
+  attempt (`savedAnswers`), and the client merges that with any local
+  backup that hasn't synced yet. Refreshing the page, closing the tab and
+  reopening it, or even switching devices now resumes with the same
+  answers — not just the same timer.
+- **Auto-submission when time runs out, even if the tab is closed.**
+  There's no always-on background process (this is a serverless
+  Next.js app), so instead `src/lib/scoring.ts` exports
+  `finalizeIfExpired()`, which is called on every path that touches an
+  attempt: loading the test page, loading the result page, and the admin
+  results view. If an attempt is still `in_progress` but its time window
+  has passed, it's scored right there from whatever was last synced to
+  the DB and marked `submitted` — so the next time *anyone* looks (the
+  student reopening the tab, or an admin checking results), it's closed
+  out correctly. If your hosting plan supports scheduled functions, you
+  could additionally point a cron job at a sweep endpoint to close out
+  attempts within seconds of expiry rather than waiting for the next
+  visit — not included here to keep the stack free-tier-friendly.
+- **Duplicate-attempt races are handled, not just prevented.** The DB's
+  unique `(test_id, user_id)` constraint on `attempts` already stopped a
+  second row from being created; now if two concurrent requests both try
+  to create the first attempt (e.g. a double page load), the loser
+  catches the unique-violation error and re-fetches the winner's row
+  instead of failing.
+- **Submit retries automatically.** If the submit request fails (dropped
+  connection, timeout under load), the client retries a few times with a
+  short backoff before giving up — submitting is safe to retry since
+  scoring is recomputed fresh from the payload each time. If all retries
+  fail, a "Retry submit" button appears; answers stay safe in
+  localStorage either way.
+- A small **sync status indicator** ("Saved" / "Saving…" / "Offline —
+  saved locally") now shows next to the timer during the test.
+
+### What's still open after Phase 4
+
+- Auto-finalization is *lazy* (triggered by the next page load that
+  touches the attempt), not instant. For truly immediate cutoff at the
+  exact second time runs out regardless of whether anyone reopens a
+  page, you'd need a scheduled job — see the note above.
+- No offline-first queueing beyond localStorage + retry; a student who's
+  fully offline for the entire test duration (never able to reach
+  `/api/tests/[id]/questions` even once) can't start the attempt at all
+  yet.
+
+## Next: Phase 5 (analytics)
+
+Not built yet: per-question difficulty stats, average time per question,
+performance trends across weeks, aptitude vs technical breakdowns.

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { finalizeIfExpired } from "@/lib/scoring";
 import {
   addQuestion,
   deleteQuestion,
@@ -10,12 +11,7 @@ import {
   updateTestSettings,
   updateTestStatus,
 } from "@/app/admin/actions";
-
-function toLocalInputValue(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+import { formatInAppTz, liveMinutesFromWindow, toDatetimeLocalValue } from "@/lib/time";
 
 export default async function AdminTestDetailPage({
   params,
@@ -40,18 +36,31 @@ export default async function AdminTestDetailPage({
     .eq("test_id", id)
     .order("score", { ascending: false, nullsFirst: false });
 
-  const userIds = [...new Set((attemptsRaw ?? []).map((a) => a.user_id))];
+  // Close out anyone whose time ran out but who never got a chance to
+  // submit (or auto-finalize via the test/result page) — so the admin view
+  // always reflects reality rather than stale "in_progress" rows.
+  const finalized = await Promise.all(
+    (attemptsRaw ?? []).map((a) => finalizeIfExpired(admin, id, a, test.duration_minutes))
+  );
+
+  const userIds = [...new Set(finalized.map((a) => a.user_id))];
   const { data: attemptUsers } = userIds.length
     ? await admin.from("users").select("id, name, register_number").in("id", userIds)
     : { data: [] };
   const userById = new Map((attemptUsers ?? []).map((u) => [u.id, u]));
-  const attempts = (attemptsRaw ?? []).map((a) => ({ ...a, user: userById.get(a.user_id) }));
+  const attempts = finalized
+    .map((a) => ({ ...a, user: userById.get(a.user_id) }))
+    .sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
 
   const submitted = attempts.filter((a) => a.status === "submitted");
   const avgScore =
     submitted.length > 0
       ? submitted.reduce((sum, a) => sum + (a.score ?? 0), 0) / submitted.length
       : 0;
+
+  const liveTotalMinutes = liveMinutesFromWindow(test.start_time, test.end_time);
+  const liveHours = Math.floor(liveTotalMinutes / 60);
+  const liveMinutes = liveTotalMinutes % 60;
 
   const boundUpdateStatus = updateTestStatus.bind(null, id);
   const boundUpdateSettings = updateTestSettings.bind(null, id);
@@ -126,20 +135,50 @@ export default async function AdminTestDetailPage({
                 required
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
+              <p className="text-xs text-slate-400 mt-1">Per student, once they start.</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Start time</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Start time (IST)</label>
               <input
                 name="start_time"
                 type="datetime-local"
-                defaultValue={toLocalInputValue(test.start_time)}
+                defaultValue={toDatetimeLocalValue(test.start_time)}
                 required
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </div>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Live for</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <input
+                  name="live_hours"
+                  type="number"
+                  min={0}
+                  defaultValue={liveHours}
+                  required
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-slate-400 mt-1">Hours</p>
+              </div>
+              <div>
+                <input
+                  name="live_minutes"
+                  type="number"
+                  min={0}
+                  max={59}
+                  defaultValue={liveMinutes}
+                  required
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-slate-400 mt-1">Minutes</p>
+              </div>
+            </div>
+          </div>
           <p className="text-xs text-slate-400">
-            {test.total_marks} total marks · ends {new Date(test.end_time).toLocaleString(undefined, { timeStyle: "short" })}
+            {test.total_marks} total marks · live until{" "}
+            {formatInAppTz(test.end_time, { dateStyle: "medium", timeStyle: "short" })} IST
           </p>
           <button className="rounded-md bg-slate-900 text-white text-sm px-4 py-2 hover:bg-slate-800">
             Save settings

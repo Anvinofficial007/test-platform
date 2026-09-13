@@ -2,14 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import SignOutButton from "@/components/SignOutButton";
+import { formatInAppTz } from "@/lib/time";
 
 function formatWindow(start: string, end: string) {
-  const s = new Date(start);
-  const e = new Date(end);
-  return `${s.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} → ${e.toLocaleString(
-    undefined,
-    { timeStyle: "short" }
-  )}`;
+  return `${formatInAppTz(start, { dateStyle: "medium", timeStyle: "short" })} → ${formatInAppTz(end, { timeStyle: "short" })} IST`;
 }
 
 export default async function DashboardPage() {
@@ -75,7 +71,8 @@ export default async function DashboardPage() {
                     <div>
                       <p className="font-medium text-slate-900">{t.title}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {t.duration_minutes} min · {t.total_marks} marks
+                        {t.duration_minutes} min · {t.total_marks} marks · live until{" "}
+                        {formatInAppTz(t.end_time, { timeStyle: "short" })} IST
                       </p>
                     </div>
                     {alreadySubmitted ? (

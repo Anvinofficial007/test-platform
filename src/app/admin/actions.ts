@@ -3,7 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import Papa from "papaparse";
+import { parseAdminDateTime } from "@/lib/time";
 import { requireAdmin } from "@/lib/supabase/adminGuard";
+
+function liveEndFromForm(formData: FormData, start: Date, durationMinutes: number): Date {
+  const liveHours = Number(formData.get("live_hours") ?? 0);
+  const liveMinutes = Number(formData.get("live_minutes") ?? 0);
+  const totalMinutes = liveHours * 60 + liveMinutes;
+
+  if (!Number.isFinite(totalMinutes) || totalMinutes < 1) {
+    throw new Error("Set how long the test should stay live");
+  }
+  if (totalMinutes < durationMinutes) {
+    throw new Error("Live window must be at least as long as the test duration");
+  }
+
+  return new Date(start.getTime() + totalMinutes * 60 * 1000);
+}
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
@@ -20,8 +36,8 @@ export async function createTest(formData: FormData) {
     throw new Error("Title, duration, and start time are required");
   }
 
-  const start = new Date(start_time);
-  const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
+  const start = parseAdminDateTime(start_time);
+  const end = liveEndFromForm(formData, start, duration_minutes);
 
   const { data, error } = await admin
     .from("tests")
@@ -50,6 +66,7 @@ export async function updateTestStatus(testId: string, status: "draft" | "publis
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/tests/${testId}`);
   revalidatePath("/admin/tests");
+  revalidatePath("/dashboard");
 }
 
 export async function updateTestSettings(testId: string, formData: FormData) {
@@ -64,8 +81,8 @@ export async function updateTestSettings(testId: string, formData: FormData) {
     throw new Error("Title, duration, and start time are required");
   }
 
-  const start = new Date(start_time);
-  const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
+  const start = parseAdminDateTime(start_time);
+  const end = liveEndFromForm(formData, start, duration_minutes);
 
   const { error } = await admin
     .from("tests")
@@ -80,6 +97,7 @@ export async function updateTestSettings(testId: string, formData: FormData) {
 
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/tests/${testId}`);
+  revalidatePath("/dashboard");
 }
 
 async function recalcTotalMarks(admin: Awaited<ReturnType<typeof requireAdmin>>["admin"], testId: string) {

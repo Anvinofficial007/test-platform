@@ -1,6 +1,8 @@
 import { createTest } from "@/app/admin/actions";
+import { nowDatetimeLocalValue } from "@/lib/time";
 
 export default function NewTestPage() {
+  const defaultStart = nowDatetimeLocalValue();
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-slate-900 mb-6">Create test</h1>
@@ -36,6 +38,7 @@ export default function NewTestPage() {
               defaultValue={60}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
             />
+            <p className="text-xs text-slate-400 mt-1">Time each student gets once they start.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Default negative marking</label>
@@ -51,15 +54,48 @@ export default function NewTestPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Start time</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Live for</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <input
+                name="live_hours"
+                type="number"
+                min={0}
+                required
+                defaultValue={3}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+              <p className="text-xs text-slate-400 mt-1">Hours</p>
+            </div>
+            <div>
+              <input
+                name="live_minutes"
+                type="number"
+                min={0}
+                max={59}
+                required
+                defaultValue={0}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+              <p className="text-xs text-slate-400 mt-1">Minutes</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">
+            How long the test stays Active after the start time.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Start time (IST)</label>
           <input
             name="start_time"
             type="datetime-local"
             required
+            defaultValue={defaultStart}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
           />
           <p className="text-xs text-slate-400 mt-1">
-            End time is calculated automatically from start time + duration.
+            Before this time a published test shows as Upcoming.
           </p>
         </div>
 
