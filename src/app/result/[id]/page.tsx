@@ -9,6 +9,15 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
   const [result, setResult] = useState<ScoreResult | null>(null);
 
   useEffect(() => {
+    // Defensive: the test page already exits fullscreen before redirecting
+    // here, but cover the case of a direct/refresh navigation landing on
+    // this page while still fullscreen for any reason.
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
     const raw = sessionStorage.getItem(`result:${id}`);
     if (raw) {
       setResult(JSON.parse(raw));

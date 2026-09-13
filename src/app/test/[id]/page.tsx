@@ -25,10 +25,21 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   const [marked, setMarked] = useState<ReviewState>({});
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("synced");
+  const [fullscreenBlocked, setFullscreenBlocked] = useState(false);
   const dirtyRef = useRef(false);
   const submittingRef = useRef(false);
+  const answersRef = useRef<AnswerState>({});
+  const markedRef = useRef<ReviewState>({});
 
   const storageKey = `attempt:${id}`;
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    markedRef.current = marked;
+  }, [marked]);
 
   // Load test + questions (server strips correct answers, per the plan)
   useEffect(() => {
@@ -96,40 +107,102 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   // "Next" doesn't hammer the network, per the plan). Writes to
   // localStorage immediately for offline resilience, and to the DB so
   // progress survives a refresh, a crash, or switching devices.
+  async function saveProgressNow() {
+    const latestAnswers = answersRef.current;
+    const latestMarked = markedRef.current;
+
+    localStorage.setItem(storageKey, JSON.stringify({ answers: latestAnswers, marked: latestMarked }));
+    dirtyRef.current = false;
+
+    setSyncStatus("syncing");
+    try {
+      const res = await fetch(`/api/tests/${id}/save-answers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: latestAnswers }),
+      });
+      if (!res.ok) throw new Error();
+      setSyncStatus("synced");
+    } catch {
+      // Offline or the request failed — the change is still safe in
+      // localStorage, and dirtyRef is left true so the next tick retries.
+      dirtyRef.current = true;
+      setSyncStatus("offline");
+    }
+  }
+
   useEffect(() => {
     if (phase !== "running") return;
     const interval = setInterval(async () => {
       if (!dirtyRef.current) return;
-      localStorage.setItem(storageKey, JSON.stringify({ answers, marked }));
-      dirtyRef.current = false;
-
-      setSyncStatus("syncing");
-      try {
-        const res = await fetch(`/api/tests/${id}/save-answers`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
-        });
-        if (!res.ok) throw new Error();
-        setSyncStatus("synced");
-      } catch {
-        // Offline or the request failed — the change is still safe in
-        // localStorage, and dirtyRef is left true so the next tick retries.
-        dirtyRef.current = true;
-        setSyncStatus("offline");
-      }
+      await saveProgressNow();
     }, AUTOSAVE_INTERVAL_MS);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, answers, marked]);
+  }, [phase, id]);
+
+  // Fullscreen lockdown: once running, exiting fullscreen (Esc, F11) or
+  // switching away from this tab/window submits the test immediately with
+  // whatever's been answered so far. Both listeners funnel into the same
+  // handleSubmit() used for a normal or timed-out submit — no separate
+  // "abort" code path, so retries/idempotency all still apply.
+  useEffect(() => {
+    if (phase !== "running") return;
+
+    async function violate(reason: string) {
+      if (submittingRef.current) return;
+      await saveProgressNow();
+      window.alert(`Test submitted: ${reason}\n\nLeaving fullscreen or switching tabs during a test ends it immediately. Your answers up to this point have been recorded.`);
+      await handleSubmit();
+    }
+
+    function handleFullscreenChange() {
+      if (!document.fullscreenElement) violate("You exited fullscreen mode.");
+    }
+    function handleVisibilityChange() {
+      if (document.hidden) violate("You switched away from the test tab or window.");
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  async function enterFullscreenAndStart() {
+    try {
+      await document.documentElement.requestFullscreen();
+      setFullscreenBlocked(false);
+    } catch {
+      // Some browsers/embedded webviews refuse fullscreen outright. We still
+      // let the test start rather than locking the student out entirely,
+      // but the exit-fullscreen tripwire can't arm without it — the
+      // tab-switch tripwire (visibilitychange) still works either way.
+      setFullscreenBlocked(true);
+    }
+    setPhase("running");
+  }
+
+  function exitFullscreenIfActive() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
 
   function selectAnswer(qid: string, key: string) {
-    setAnswers((a) => ({ ...a, [qid]: key }));
+    const nextAnswers = { ...answersRef.current, [qid]: key };
+    answersRef.current = nextAnswers;
+    setAnswers(nextAnswers);
     dirtyRef.current = true;
   }
 
   function toggleMark(qid: string) {
-    setMarked((m) => ({ ...m, [qid]: !m[qid] }));
+    const nextMarked = { ...markedRef.current, [qid]: !markedRef.current[qid] };
+    markedRef.current = nextMarked;
+    setMarked(nextMarked);
     dirtyRef.current = true;
   }
 
@@ -137,7 +210,12 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
     if (submittingRef.current) return;
     submittingRef.current = true;
     setPhase("submitting");
-    localStorage.setItem(storageKey, JSON.stringify({ answers, marked }));
+    exitFullscreenIfActive();
+
+    const finalAnswers = answersRef.current;
+    const finalMarked = markedRef.current;
+    localStorage.setItem(storageKey, JSON.stringify({ answers: finalAnswers, marked: finalMarked }));
+    await saveProgressNow();
 
     // The exam-day case this guards against: 300 students submitting near
     // the same second and a few requests time out or drop. Retry a handful
@@ -152,7 +230,7 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
         const res = await fetch(`/api/tests/${id}/submit`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
+          body: JSON.stringify({ answers: answersRef.current }),
         });
         const result = await res.json();
 
@@ -239,8 +317,14 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
             <li>Your answers are saved automatically as you go</li>
           </ul>
 
-          <button onClick={() => setPhase("running")} className="btn btn-primary w-full mt-6">
-            Start test
+          <div className="mt-4 text-sm px-3 py-2.5 rounded" style={{ background: "var(--red-soft)", color: "var(--red)" }}>
+            This test runs in fullscreen. Exiting fullscreen or switching to
+            another tab or window will submit the test immediately with
+            whatever you&apos;ve answered so far — this can&apos;t be undone.
+          </div>
+
+          <button onClick={enterFullscreenAndStart} className="btn btn-primary w-full mt-6">
+            Enter fullscreen &amp; start test
           </button>
         </div>
       </main>
@@ -270,6 +354,11 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
               Question {current + 1} of {questions.length}
             </p>
             <div className="flex items-center gap-2">
+              {fullscreenBlocked && (
+                <span className="badge" style={{ background: "var(--amber-soft)", color: "var(--amber)" }}>
+                  Fullscreen blocked by browser
+                </span>
+              )}
               <span
                 className="badge"
                 style={
