@@ -191,7 +191,11 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   );
 
   if (phase === "loading") {
-    return <main className="min-h-screen flex items-center justify-center text-slate-400">Loading…</main>;
+    return (
+      <main className="min-h-screen flex items-center justify-center" style={{ color: "var(--ink-faint)" }}>
+        Loading…
+      </main>
+    );
   }
 
   if (phase === "error" || !test) {
@@ -200,18 +204,15 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
     // the student with only "back to dashboard".
     const canRetrySubmit = phase === "error" && test && questions.length > 0;
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-3 text-slate-500 px-4 text-center">
+      <main className="min-h-screen flex flex-col items-center justify-center gap-3 px-4 text-center" style={{ color: "var(--ink-soft)" }}>
         <p>{errorMsg || "Something went wrong."}</p>
         <div className="flex items-center gap-4">
           {canRetrySubmit && (
-            <button
-              onClick={handleSubmit}
-              className="rounded-md bg-slate-900 text-white text-sm px-4 py-2 hover:bg-slate-800"
-            >
+            <button onClick={handleSubmit} className="btn btn-primary">
               Retry submit
             </button>
           )}
-          <a href="/dashboard" className="text-slate-900 underline text-sm">
+          <a href="/dashboard" className="btn-text text-sm underline">
             Back to dashboard
           </a>
         </div>
@@ -221,23 +222,24 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
 
   if (phase === "instructions") {
     return (
-      <main className="min-h-screen bg-slate-50 px-4 py-10">
-        <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-lg p-6">
-          <h1 className="text-xl font-semibold text-slate-900">{test.title}</h1>
-          <p className="text-sm text-slate-500 mt-1">{test.description}</p>
+      <main className="min-h-screen px-4 py-10">
+        <div className="max-w-xl mx-auto surface p-6">
+          <h1 className="text-xl font-semibold" style={{ color: "var(--ink)" }}>
+            {test.title}
+          </h1>
+          <p className="text-sm mt-1.5" style={{ color: "var(--ink-soft)" }}>
+            {test.description}
+          </p>
 
-          <ul className="mt-6 space-y-2 text-sm text-slate-700 list-disc list-inside">
+          <ul className="mt-6 space-y-2 text-sm list-disc list-inside" style={{ color: "var(--ink)" }}>
             <li>{questions.length} questions, {test.duration_minutes} minutes</li>
             <li>+1 mark for each correct answer</li>
             <li>−0.25 for each wrong answer, 0 for unanswered</li>
-            <li>The timer starts as soon as you click "Start test" and cannot be paused</li>
+            <li>The timer starts as soon as you click &ldquo;Start test&rdquo; and cannot be paused</li>
             <li>Your answers are saved automatically as you go</li>
           </ul>
 
-          <button
-            onClick={() => setPhase("running")}
-            className="mt-6 w-full rounded-md bg-slate-900 text-white text-sm font-medium py-2 hover:bg-slate-800 transition-colors"
-          >
+          <button onClick={() => setPhase("running")} className="btn btn-primary w-full mt-6">
             Start test
           </button>
         </div>
@@ -246,7 +248,11 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   }
 
   if (phase === "submitting") {
-    return <main className="min-h-screen flex items-center justify-center text-slate-400">Submitting…</main>;
+    return (
+      <main className="min-h-screen flex items-center justify-center" style={{ color: "var(--ink-faint)" }}>
+        Submitting…
+      </main>
+    );
   }
 
   const q = questions[current];
@@ -255,87 +261,107 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
   const timeLow = secondsLeft <= 60;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6">
+    <main className="min-h-screen px-4 py-6">
       <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-[1fr_220px] gap-6">
         {/* Question area */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
               Question {current + 1} of {questions.length}
             </p>
             <div className="flex items-center gap-2">
               <span
-                className={`text-xs px-2 py-1 rounded-md ${
+                className="badge"
+                style={
                   syncStatus === "offline"
-                    ? "bg-amber-100 text-amber-700"
+                    ? { background: "var(--amber-soft)", color: "var(--amber)" }
                     : syncStatus === "syncing"
-                    ? "bg-slate-100 text-slate-500"
-                    : "text-slate-400"
-                }`}
+                    ? { background: "#ece8dd", color: "var(--ink-soft)" }
+                    : { background: "transparent", color: "var(--ink-faint)" }
+                }
               >
                 {syncStatus === "offline" ? "Offline — saved locally" : syncStatus === "syncing" ? "Saving…" : "Saved"}
               </span>
               <span
-                className={`text-sm font-mono font-medium px-3 py-1 rounded-md ${
-                  timeLow ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"
-                }`}
+                className="text-sm font-mono font-semibold px-3 py-1 rounded"
+                style={
+                  timeLow
+                    ? { background: "var(--red-soft)", color: "var(--red)" }
+                    : { background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--rule-strong)" }
+                }
               >
                 {mins}:{secs.toString().padStart(2, "0")}
               </span>
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-lg p-5">
-            <p className="text-slate-900 font-medium mb-4">{q.question_text}</p>
+          <div className="surface p-5">
+            <p className="font-medium mb-4" style={{ color: "var(--ink)" }}>
+              {q.question_text}
+            </p>
             {q.question_image_url && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={q.question_image_url} alt="Question figure" className="mb-4 rounded-md border" />
+              <img
+                src={q.question_image_url}
+                alt="Question figure"
+                className="mb-4 rounded"
+                style={{ border: "1px solid var(--rule-strong)" }}
+              />
             )}
 
             <div className="space-y-2">
-              {q.options.map((opt) => (
-                <label
-                  key={opt.key}
-                  className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors ${
-                    answers[q.id] === opt.key
-                      ? "border-slate-900 bg-slate-50"
-                      : "border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={q.id}
-                    checked={answers[q.id] === opt.key}
-                    onChange={() => selectAnswer(q.id, opt.key)}
-                    className="accent-slate-900"
-                  />
-                  <span className="font-medium text-slate-500">{opt.key}.</span>
-                  <span>{opt.text}</span>
-                  {opt.image_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={opt.image_url} alt={`Option ${opt.key}`} className="h-12 rounded border ml-2" />
-                  )}
-                </label>
-              ))}
+              {q.options.map((opt) => {
+                const selected = answers[q.id] === opt.key;
+                return (
+                  <label
+                    key={opt.key}
+                    className="flex items-center gap-3 rounded px-3 py-2 text-sm cursor-pointer transition-colors"
+                    style={
+                      selected
+                        ? { border: "1px solid var(--navy)", background: "#eef0f8" }
+                        : { border: "1px solid var(--rule-strong)", background: "var(--surface)" }
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name={q.id}
+                      checked={selected}
+                      onChange={() => selectAnswer(q.id, opt.key)}
+                      style={{ accentColor: "var(--navy)" }}
+                    />
+                    <span className="font-semibold" style={{ color: "var(--ink-soft)" }}>
+                      {opt.key}.
+                    </span>
+                    <span style={{ color: "var(--ink)" }}>{opt.text}</span>
+                    {opt.image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={opt.image_url}
+                        alt={`Option ${opt.key}`}
+                        className="h-12 rounded ml-2"
+                        style={{ border: "1px solid var(--rule-strong)" }}
+                      />
+                    )}
+                  </label>
+                );
+              })}
             </div>
 
             <div className="mt-4 flex items-center justify-between">
               <button
                 onClick={() => toggleMark(q.id)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-md border transition-colors ${
+                className="text-xs font-medium px-3 py-1.5 rounded transition-colors"
+                style={
                   marked[q.id]
-                    ? "border-amber-400 bg-amber-50 text-amber-700"
-                    : "border-slate-200 text-slate-500 hover:bg-slate-50"
-                }`}
+                    ? { border: "1px solid #d9b25c", background: "var(--amber-soft)", color: "var(--amber)" }
+                    : { border: "1px solid var(--rule-strong)", color: "var(--ink-soft)" }
+                }
               >
                 {marked[q.id] ? "Marked for review" : "Mark for review"}
               </button>
 
               {answers[q.id] && (
-                <button
-                  onClick={() => selectAnswer(q.id, "")}
-                  className="text-xs text-slate-400 hover:text-slate-600"
-                >
+                <button onClick={() => selectAnswer(q.id, "")} className="btn-text text-xs">
                   Clear answer
                 </button>
               )}
@@ -346,22 +372,17 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
             <button
               disabled={current === 0}
               onClick={() => setCurrent((c) => Math.max(0, c - 1))}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm disabled:opacity-40"
+              className="btn btn-secondary"
+              style={current === 0 ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
             >
               Previous
             </button>
             {current < questions.length - 1 ? (
-              <button
-                onClick={() => setCurrent((c) => Math.min(questions.length - 1, c + 1))}
-                className="rounded-md bg-slate-900 text-white px-4 py-2 text-sm hover:bg-slate-800"
-              >
+              <button onClick={() => setCurrent((c) => Math.min(questions.length - 1, c + 1))} className="btn btn-primary">
                 Next
               </button>
             ) : (
-              <button
-                onClick={handleSubmit}
-                className="rounded-md bg-emerald-600 text-white px-4 py-2 text-sm hover:bg-emerald-700"
-              >
+              <button onClick={handleSubmit} className="btn btn-success">
                 Submit test
               </button>
             )}
@@ -369,8 +390,8 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
         </div>
 
         {/* Question palette */}
-        <aside className="bg-white border border-slate-200 rounded-lg p-4 h-fit">
-          <p className="text-xs text-slate-500 mb-3">
+        <aside className="surface p-4 h-fit">
+          <p className="text-xs mb-3" style={{ color: "var(--ink-faint)" }}>
             {answeredCount} of {questions.length} answered
           </p>
           <div className="grid grid-cols-5 gap-2">
@@ -382,19 +403,22 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
                 : marked[qq.id]
                 ? "marked"
                 : "unanswered";
-              const styles: Record<string, string> = {
-                answered: "bg-emerald-600 text-white",
-                "answered-marked": "bg-amber-500 text-white",
-                marked: "bg-amber-100 text-amber-700 border border-amber-300",
-                unanswered: "bg-slate-100 text-slate-600",
+              const styles: Record<string, React.CSSProperties> = {
+                answered: { background: "var(--green)", color: "var(--surface)" },
+                "answered-marked": { background: "var(--amber)", color: "var(--surface)" },
+                marked: { background: "var(--amber-soft)", color: "var(--amber)", border: "1px solid #d9b25c" },
+                unanswered: { background: "#ece8dd", color: "var(--ink-soft)" },
               };
               return (
                 <button
                   key={qq.id}
                   onClick={() => setCurrent(i)}
-                  className={`text-xs font-medium rounded-md h-8 ${styles[state]} ${
-                    i === current ? "ring-2 ring-slate-900" : ""
-                  }`}
+                  className="text-xs font-medium rounded h-8"
+                  style={{
+                    ...styles[state],
+                    outline: i === current ? "2px solid var(--navy)" : "none",
+                    outlineOffset: "1px",
+                  }}
                 >
                   {i + 1}
                 </button>
@@ -402,10 +426,7 @@ export default function TestPage({ params }: { params: Promise<{ id: string }> }
             })}
           </div>
 
-          <button
-            onClick={handleSubmit}
-            className="mt-4 w-full rounded-md bg-slate-900 text-white text-sm py-2 hover:bg-slate-800"
-          >
+          <button onClick={handleSubmit} className="btn btn-primary w-full mt-4">
             Submit test
           </button>
         </aside>

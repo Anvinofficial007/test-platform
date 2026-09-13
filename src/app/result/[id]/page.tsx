@@ -25,9 +25,9 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
 
   if (!result) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4 text-slate-500">
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ color: "var(--ink-soft)" }}>
         <p>No result found for this test.</p>
-        <Link href="/dashboard" className="text-slate-900 underline text-sm">
+        <Link href="/dashboard" className="btn-text text-sm underline">
           Back to dashboard
         </Link>
       </main>
@@ -37,49 +37,60 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
   const percent = result.total_marks > 0 ? (result.score / result.total_marks) * 100 : 0;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10">
+    <main className="min-h-screen px-4 py-10">
       <div className="max-w-xl mx-auto">
-        <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-          <p className="text-sm text-slate-500">Your score</p>
-          <p className="text-4xl font-semibold text-slate-900 mt-1">
-            {result.score} <span className="text-lg text-slate-400">/ {result.total_marks}</span>
+        <div className="surface p-6 text-center">
+          <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+            Your score
           </p>
-          <p className="text-sm text-slate-500 mt-1">{percent.toFixed(1)}%</p>
+          <p className="text-4xl font-semibold mt-1" style={{ color: "var(--ink)" }}>
+            {result.score}{" "}
+            <span className="text-lg" style={{ color: "var(--ink-faint)" }}>
+              / {result.total_marks}
+            </span>
+          </p>
+          <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+            {percent.toFixed(1)}%
+          </p>
 
           <div className="grid grid-cols-3 gap-3 mt-6 text-sm">
-            <div className="rounded-md bg-emerald-50 text-emerald-700 py-3">
+            <div className="rounded py-3" style={{ background: "var(--green-soft)", color: "var(--green)" }}>
               <p className="text-lg font-semibold">{result.correct_count}</p>
               <p className="text-xs">Correct</p>
             </div>
-            <div className="rounded-md bg-red-50 text-red-700 py-3">
+            <div className="rounded py-3" style={{ background: "var(--red-soft)", color: "var(--red)" }}>
               <p className="text-lg font-semibold">{result.wrong_count}</p>
               <p className="text-xs">Wrong</p>
             </div>
-            <div className="rounded-md bg-slate-100 text-slate-600 py-3">
+            <div className="rounded py-3" style={{ background: "#ece8dd", color: "var(--ink-soft)" }}>
               <p className="text-lg font-semibold">{result.unanswered_count}</p>
               <p className="text-xs">Unanswered</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+        <div className="mt-6 surface divider">
           {result.breakdown.map((b, i) => (
-            <div key={b.question_id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-              <span className="text-slate-600">Q{i + 1}</span>
-              <span className="text-slate-500">
-                Your answer: <span className="font-medium">{b.selected ?? "—"}</span>
+            <div
+              key={b.question_id}
+              className="flex items-center justify-between px-4 py-2.5 text-sm"
+            >
+              <span style={{ color: "var(--ink-soft)" }}>Q{i + 1}</span>
+              <span style={{ color: "var(--ink-soft)" }}>
+                Your answer: <span className="font-medium" style={{ color: "var(--ink)" }}>{b.selected ?? "—"}</span>
               </span>
-              <span className="text-slate-500">
-                Correct: <span className="font-medium">{b.correct}</span>
+              <span style={{ color: "var(--ink-soft)" }}>
+                Correct: <span className="font-medium" style={{ color: "var(--ink)" }}>{b.correct}</span>
               </span>
               <span
-                className={`text-xs font-medium px-2 py-0.5 rounded ${
+                className="badge"
+                style={
                   b.is_correct
-                    ? "bg-emerald-100 text-emerald-700"
+                    ? { background: "var(--green-soft)", color: "var(--green)" }
                     : b.selected
-                    ? "bg-red-100 text-red-700"
-                    : "bg-slate-100 text-slate-500"
-                }`}
+                    ? { background: "var(--red-soft)", color: "var(--red)" }
+                    : { background: "#ece8dd", color: "var(--ink-soft)" }
+                }
               >
                 {b.marks_awarded > 0 ? `+${b.marks_awarded}` : b.marks_awarded}
               </span>
@@ -87,10 +98,7 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
           ))}
         </div>
 
-        <Link
-          href="/dashboard"
-          className="mt-6 block text-center rounded-md bg-slate-900 text-white text-sm py-2 hover:bg-slate-800"
-        >
+        <Link href="/dashboard" className="btn btn-primary w-full mt-6" style={{ display: "flex" }}>
           Back to dashboard
         </Link>
       </div>

@@ -14,19 +14,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!profile || profile.role !== "admin") redirect("/dashboard");
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen">
+      <header style={{ borderBottom: "1px solid var(--rule-strong)", background: "var(--surface)" }}>
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <Link href="/admin/tests" className="font-semibold text-slate-900 text-sm">
+            <Link href="/admin/tests" className="font-semibold text-sm" style={{ color: "var(--ink)" }}>
               Admin panel
             </Link>
-            <Link href="/admin/tests" className="text-sm text-slate-500 hover:text-slate-900">
+            <Link href="/admin/tests" className="btn-text text-sm">
               Tests
             </Link>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-xs text-slate-400 hover:text-slate-700">
+            <Link href="/dashboard" className="btn-text text-xs">
               Student view
             </Link>
             <SignOutButton />

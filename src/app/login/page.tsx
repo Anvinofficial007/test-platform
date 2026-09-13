@@ -63,74 +63,76 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <main className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold text-slate-900">Weekly Test Portal</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+            Weekly Test Portal
+          </h1>
+          <p className="mt-1.5 text-sm" style={{ color: "var(--ink-soft)" }}>
             {mode === "signin" ? "Sign in to continue" : "Create your student account"}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="surface p-6 space-y-4">
           {mode === "signup" && (
             <>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full name</label>
+                <label className="field-label">Full name</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="field-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Register number</label>
+                <label className="field-label">Register number</label>
                 <input
                   type="text"
                   value={registerNumber}
                   onChange={(e) => setRegisterNumber(e.target.value)}
                   placeholder="e.g. TKM21EC045"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="field-input"
                 />
               </div>
             </>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <label className="field-label">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="field-input"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <label className="field-label">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="field-input"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p className="text-sm px-3 py-2 rounded" style={{ background: "var(--red-soft)", color: "var(--red)" }}>
+              {error}
+            </p>
+          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-slate-900 text-white text-sm font-medium py-2 hover:bg-slate-800 transition-colors disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading} className="btn btn-primary w-full">
             {loading ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
           </button>
         </form>
 
         <button
           onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          className="mt-4 w-full text-xs text-center text-slate-500 hover:text-slate-700"
+          className="btn-text mt-4 w-full text-center text-xs"
         >
           {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
         </button>

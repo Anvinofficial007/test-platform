@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { finalizeIfExpired } from "@/lib/scoring";
+import { getTestAnalytics } from "@/lib/analytics";
 import {
   addQuestion,
   deleteQuestion,
@@ -57,6 +58,7 @@ export default async function AdminTestDetailPage({
     submitted.length > 0
       ? submitted.reduce((sum, a) => sum + (a.score ?? 0), 0) / submitted.length
       : 0;
+  const analytics = await getTestAnalytics(admin, id, test.title);
 
   const liveTotalMinutes = liveMinutesFromWindow(test.start_time, test.end_time);
   const liveHours = Math.floor(liveTotalMinutes / 60);
@@ -74,82 +76,72 @@ export default async function AdminTestDetailPage({
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/admin/tests" className="text-xs text-slate-400 hover:text-slate-700">
+          <Link href="/admin/tests" className="btn-text text-xs">
             ← All tests
           </Link>
-          <h1 className="text-xl font-semibold text-slate-900 mt-1">{test.title}</h1>
+          <h1 className="text-xl font-semibold mt-1" style={{ color: "var(--ink)" }}>
+            {test.title}
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           {test.status !== "published" && (
             <form action={async () => { "use server"; await boundUpdateStatus("published"); }}>
-              <button className="rounded-md bg-emerald-600 text-white text-sm px-4 py-2 hover:bg-emerald-700">
-                Publish
-              </button>
+              <button className="btn btn-success">Publish</button>
             </form>
           )}
           {test.status === "published" && (
             <form action={async () => { "use server"; await boundUpdateStatus("draft"); }}>
-              <button className="rounded-md border border-slate-300 text-slate-700 text-sm px-4 py-2 hover:bg-slate-50">
-                Unpublish
-              </button>
+              <button className="btn btn-secondary">Unpublish</button>
             </form>
           )}
           <form action={async () => { "use server"; await boundUpdateStatus("closed"); }}>
-            <button className="rounded-md border border-slate-300 text-slate-700 text-sm px-4 py-2 hover:bg-slate-50">
-              Close
-            </button>
+            <button className="btn btn-secondary">Close</button>
           </form>
         </div>
       </div>
 
       {/* Settings */}
-      <section className="bg-white border border-slate-200 rounded-lg p-5">
-        <h2 className="text-sm font-medium text-slate-700 mb-4">Test settings</h2>
+      <section className="surface p-5">
+        <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--ink)" }}>
+          Test settings
+        </h2>
         <form action={boundUpdateSettings} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Title</label>
-            <input
-              name="title"
-              defaultValue={test.title}
-              required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
+            <label className="field-label">Title</label>
+            <input name="title" defaultValue={test.title} required className="field-input" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
-            <textarea
-              name="description"
-              defaultValue={test.description ?? ""}
-              rows={2}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
+            <label className="field-label">Description</label>
+            <textarea name="description" defaultValue={test.description ?? ""} rows={2} className="field-input" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Duration (minutes)</label>
+              <label className="field-label">Duration (minutes)</label>
               <input
                 name="duration_minutes"
                 type="number"
                 min={1}
                 defaultValue={test.duration_minutes}
                 required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="field-input"
               />
-              <p className="text-xs text-slate-400 mt-1">Per student, once they start.</p>
+              <p className="text-xs mt-1" style={{ color: "var(--ink-faint)" }}>
+                Per student, once they start.
+              </p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Start time (IST)</label>
+              <label className="field-label">Start time (IST)</label>
               <input
                 name="start_time"
                 type="datetime-local"
                 defaultValue={toDatetimeLocalValue(test.start_time)}
                 required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="field-input"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Live for</label>
+            <label className="field-label">Live for</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <input
@@ -158,9 +150,11 @@ export default async function AdminTestDetailPage({
                   min={0}
                   defaultValue={liveHours}
                   required
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="field-input"
                 />
-                <p className="text-xs text-slate-400 mt-1">Hours</p>
+                <p className="text-xs mt-1" style={{ color: "var(--ink-faint)" }}>
+                  Hours
+                </p>
               </div>
               <div>
                 <input
@@ -170,50 +164,55 @@ export default async function AdminTestDetailPage({
                   max={59}
                   defaultValue={liveMinutes}
                   required
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="field-input"
                 />
-                <p className="text-xs text-slate-400 mt-1">Minutes</p>
+                <p className="text-xs mt-1" style={{ color: "var(--ink-faint)" }}>
+                  Minutes
+                </p>
               </div>
             </div>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
             {test.total_marks} total marks · live until{" "}
             {formatInAppTz(test.end_time, { dateStyle: "medium", timeStyle: "short" })} IST
           </p>
-          <button className="rounded-md bg-slate-900 text-white text-sm px-4 py-2 hover:bg-slate-800">
-            Save settings
-          </button>
+          <button className="btn btn-primary">Save settings</button>
         </form>
       </section>
 
       {/* Questions */}
-      <section className="bg-white border border-slate-200 rounded-lg p-5">
+      <section className="surface p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-medium text-slate-700">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
             Questions ({(questions ?? []).length})
           </h2>
         </div>
 
         {(questions ?? []).length > 0 && (
-          <div className="divide-y divide-slate-100 mb-6">
+          <div className="divider mb-6">
             {(questions ?? []).map((q, i) => (
               <div key={q.id} className="py-2.5 flex items-start justify-between gap-4">
                 <div className="text-sm flex gap-3">
                   {q.question_image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={q.question_image_url} alt="" className="w-14 h-14 object-cover rounded border border-slate-200 shrink-0" />
+                    <img
+                      src={q.question_image_url}
+                      alt=""
+                      className="w-14 h-14 object-cover rounded shrink-0"
+                      style={{ border: "1px solid var(--rule-strong)" }}
+                    />
                   )}
                   <div>
-                    <p className="text-slate-900">
+                    <p style={{ color: "var(--ink)" }}>
                       {i + 1}. {q.question_text}
                     </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs mt-0.5" style={{ color: "var(--ink-faint)" }}>
                       Answer: {q.correct_answer} · +{q.marks} / −{q.negative_marks}
                     </p>
                   </div>
                 </div>
                 <form action={async () => { "use server"; await boundDeleteQuestion(q.id); }}>
-                  <button className="text-xs text-red-500 hover:text-red-700 shrink-0">Delete</button>
+                  <button className="btn-danger text-xs shrink-0">Delete</button>
                 </form>
               </div>
             ))}
@@ -222,103 +221,179 @@ export default async function AdminTestDetailPage({
 
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <h3 className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">
+            <h3 className="text-xs font-semibold mb-2 tracking-wide" style={{ color: "var(--ink-soft)" }}>
               Add one question
             </h3>
-            <form action={boundAddQuestion} className="space-y-2">
+            <form action={boundAddQuestion} className="space-y-3">
               <input
                 name="question_text"
                 placeholder="Question text (optional if using an image)"
-                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                className="field-input"
               />
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Question image (optional)</label>
-                <input name="question_image" type="file" accept="image/*" className="w-full text-xs" />
+                <label className="field-label">Question image (optional)</label>
+                <input name="question_image" type="file" accept="image/*" className="field-file" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <input name="option_a_text" placeholder="Option A" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
-                  <input name="option_a_image" type="file" accept="image/*" className="w-full text-xs" />
+                  <label className="field-label">Option A</label>
+                  <input name="option_a_text" placeholder="Text" required className="field-input mb-1.5" />
+                  <input name="option_a_image" type="file" accept="image/*" className="field-file" />
                 </div>
                 <div>
-                  <input name="option_b_text" placeholder="Option B" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
-                  <input name="option_b_image" type="file" accept="image/*" className="w-full text-xs" />
+                  <label className="field-label">Option B</label>
+                  <input name="option_b_text" placeholder="Text" required className="field-input mb-1.5" />
+                  <input name="option_b_image" type="file" accept="image/*" className="field-file" />
                 </div>
                 <div>
-                  <input name="option_c_text" placeholder="Option C" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
-                  <input name="option_c_image" type="file" accept="image/*" className="w-full text-xs" />
+                  <label className="field-label">Option C</label>
+                  <input name="option_c_text" placeholder="Text" required className="field-input mb-1.5" />
+                  <input name="option_c_image" type="file" accept="image/*" className="field-file" />
                 </div>
                 <div>
-                  <input name="option_d_text" placeholder="Option D" required className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm mb-1" />
-                  <input name="option_d_image" type="file" accept="image/*" className="w-full text-xs" />
+                  <label className="field-label">Option D</label>
+                  <input name="option_d_text" placeholder="Text" required className="field-input mb-1.5" />
+                  <input name="option_d_image" type="file" accept="image/*" className="field-file" />
                 </div>
               </div>
+
               <div className="grid grid-cols-3 gap-2">
-                <select name="correct_answer" required className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-                  <option value="">Correct</option>
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
-                </select>
-                <input name="marks" type="number" step="0.25" defaultValue={1} placeholder="Marks" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
-                <input name="negative_marks" type="number" step="0.25" defaultValue={0.25} placeholder="Negative" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
+                <div>
+                  <label className="field-label">Correct</label>
+                  <select name="correct_answer" required className="field-input">
+                    <option value="">—</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label">Marks</label>
+                  <input name="marks" type="number" step="0.25" defaultValue={1} className="field-input" />
+                </div>
+                <div>
+                  <label className="field-label">Negative</label>
+                  <input name="negative_marks" type="number" step="0.25" defaultValue={0.25} className="field-input" />
+                </div>
               </div>
-              <button className="w-full rounded-md bg-slate-900 text-white text-sm py-1.5 hover:bg-slate-800">
-                Add question
-              </button>
+
+              <button className="btn btn-primary w-full">Add question</button>
             </form>
           </div>
 
           <div>
-            <h3 className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">
+            <h3 className="text-xs font-semibold mb-2 tracking-wide" style={{ color: "var(--ink-soft)" }}>
               Bulk import from CSV
             </h3>
-            <form action={boundImportCsv} className="space-y-2">
-              <p className="text-xs text-slate-400">
+            <form action={boundImportCsv} className="space-y-3">
+              <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
                 Columns: Question, A, B, C, D, Answer, Marks, Negative
               </p>
-              <input
-                name="file"
-                type="file"
-                accept=".csv"
-                required
-                className="w-full text-sm border border-slate-300 rounded-md px-2 py-1.5"
-              />
-              <button className="w-full rounded-md border border-slate-300 text-slate-700 text-sm py-1.5 hover:bg-slate-50">
-                Upload CSV
-              </button>
+              <div>
+                <label className="field-label">CSV file</label>
+                <input name="file" type="file" accept=".csv" required className="field-file" />
+              </div>
+              <button className="btn btn-secondary w-full">Upload CSV</button>
             </form>
           </div>
         </div>
       </section>
 
-      {/* Results */}
-      <section className="bg-white border border-slate-200 rounded-lg p-5">
+      {/* Analytics */}
+      <section className="surface p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-medium text-slate-700">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+            Analytics
+          </h2>
+        </div>
+
+        <div className="grid md:grid-cols-4 gap-3 mb-5">
+          <div className="rounded p-3" style={{ background: "var(--surface-alt)", border: "1px solid var(--rule-strong)" }}>
+            <p className="text-xs" style={{ color: "var(--ink-faint)" }}>Attempts</p>
+            <p className="text-xl font-semibold mt-1" style={{ color: "var(--ink)" }}>{analytics.total_attempts}</p>
+          </div>
+          <div className="rounded p-3" style={{ background: "var(--surface-alt)", border: "1px solid var(--rule-strong)" }}>
+            <p className="text-xs" style={{ color: "var(--ink-faint)" }}>Avg score</p>
+            <p className="text-xl font-semibold mt-1" style={{ color: "var(--ink)" }}>{analytics.average_score.toFixed(1)}</p>
+          </div>
+          <div className="rounded p-3" style={{ background: "var(--surface-alt)", border: "1px solid var(--rule-strong)" }}>
+            <p className="text-xs" style={{ color: "var(--ink-faint)" }}>Highest</p>
+            <p className="text-xl font-semibold mt-1" style={{ color: "var(--ink)" }}>{analytics.highest_score}</p>
+          </div>
+          <div className="rounded p-3" style={{ background: "var(--surface-alt)", border: "1px solid var(--rule-strong)" }}>
+            <p className="text-xs" style={{ color: "var(--ink-faint)" }}>Lowest</p>
+            <p className="text-xl font-semibold mt-1" style={{ color: "var(--ink)" }}>{analytics.lowest_score}</p>
+          </div>
+        </div>
+
+        {analytics.top_performer && (
+          <p className="text-sm mb-5" style={{ color: "var(--ink-soft)" }}>
+            Top performer: <span className="font-semibold" style={{ color: "var(--ink)" }}>{analytics.top_performer.name}</span>{" "}
+            <span style={{ color: "var(--ink-faint)" }}>({analytics.top_performer.register_number})</span> — {analytics.top_performer.score} marks
+          </p>
+        )}
+
+        <div className="divider">
+          {analytics.question_stats.map((q) => (
+            <div key={q.id} className="py-2.5 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <p style={{ color: "var(--ink)" }}>
+                  Q{q.order_index}. {q.text}
+                </p>
+                <span className="badge" style={{
+                  background:
+                    q.difficulty === "easy"
+                      ? "var(--green-soft)"
+                      : q.difficulty === "hard"
+                        ? "var(--red-soft)"
+                        : "#ece8dd",
+                  color:
+                    q.difficulty === "easy"
+                      ? "var(--green)"
+                      : q.difficulty === "hard"
+                        ? "var(--red)"
+                        : "var(--ink-soft)",
+                }}>
+                  {q.difficulty}
+                </span>
+              </div>
+              <p className="text-xs mt-1" style={{ color: "var(--ink-faint)" }}>
+                {q.correct_count} correct · {q.incorrect_count} wrong · {q.unanswered_count} unanswered · {q.accuracy.toFixed(0)}% accuracy
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Results */}
+      <section className="surface p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
             Results — {submitted.length} attempted, avg {avgScore.toFixed(1)}
           </h2>
-          <a
-            href={`/api/admin/tests/${id}/results-csv`}
-            className="text-xs text-slate-500 hover:text-slate-900 underline"
-          >
+          <a href={`/api/admin/tests/${id}/results-csv`} className="btn-text text-xs underline">
             Download CSV
           </a>
         </div>
 
         {(attempts ?? []).length === 0 ? (
-          <p className="text-sm text-slate-400">No attempts yet.</p>
+          <p className="text-sm" style={{ color: "var(--ink-faint)" }}>
+            No attempts yet.
+          </p>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divider">
             {attempts.map((a) => (
               <div key={a.id} className="py-2 flex items-center justify-between text-sm">
                 <div>
-                  <p className="text-slate-900">
+                  <p style={{ color: "var(--ink)" }}>
                     {a.user?.name}{" "}
-                    <span className="text-xs text-slate-400">({a.user?.register_number})</span>
+                    <span className="text-xs" style={{ color: "var(--ink-faint)" }}>
+                      ({a.user?.register_number})
+                    </span>
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
                     {a.status}
                     {a.status === "submitted" && ` · Score: ${a.score}`}
                   </p>
@@ -326,12 +401,12 @@ export default async function AdminTestDetailPage({
                 <div className="flex items-center gap-3">
                   {a.status === "submitted" && (
                     <form action={async () => { "use server"; await boundResetAttempt(a.id); }}>
-                      <button className="text-xs text-slate-500 hover:text-slate-900">Reset</button>
+                      <button className="btn-text text-xs">Reset</button>
                     </form>
                   )}
                   {a.status !== "disqualified" && (
                     <form action={async () => { "use server"; await boundDisqualify(a.id); }}>
-                      <button className="text-xs text-red-500 hover:text-red-700">Disqualify</button>
+                      <button className="btn-danger text-xs">Disqualify</button>
                     </form>
                   )}
                 </div>
